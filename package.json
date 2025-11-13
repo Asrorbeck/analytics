@@ -7,7 +7,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist --cname analytics.asrorbeck.uz"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
