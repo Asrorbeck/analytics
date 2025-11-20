@@ -125,6 +125,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Geist", sans-serif;
   }
 
   /* Add custom scrollbar styling for professional look */
@@ -153,83 +154,3 @@
   }
 }
 
-/* Hide Vercel/Next.js branding elements */
-[data-vercel-analytics],
-[data-nextjs-toast],
-iframe[src*="vercel"],
-a[href*="vercel.com"],
-a[href*="nextjs.org"],
-img[src*="next"],
-img[src*="vercel"],
-[class*="next-logo"],
-[class*="NextLogo"],
-[data-nextjs],
-#__nextjs-dev-overlay,
-.__nextjs-dev-overlay,
-[aria-label*="Next.js"],
-button[aria-label*="Next.js"],
-div[aria-label*="Next.js"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-/* Hide any element containing "N" logo in sidebar footer area */
-[data-slot="sidebar-footer"] img,
-[data-sidebar="footer"] img,
-aside img[alt*="Next"],
-aside img[alt*="next"],
-aside button[aria-label*="Next"],
-aside div[aria-label*="Next"],
-/* More specific selectors for Next.js branding */
-button[title*="Next"],
-button[title*="next"],
-div[title*="Next"],
-div[title*="next"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  width: 0 !important;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* Hide Next.js dev overlay and any floating elements */
-#__nextjs-dev-overlay,
-.__nextjs-dev-overlay,
-[data-nextjs-dev-overlay],
-iframe[id*="next"],
-iframe[src*="next"] {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-/* Hide Next.js logo button - target all possible locations */
-aside button[class*="rounded"]:not([aria-label*="Collapse"]):not([aria-label*="Expand"]):not([aria-label*="Settings"]):not([aria-label*="Language"]):not([aria-label*="Theme"]):not([aria-label*="Account"]):not([aria-label*="User"]):not([aria-label*="Menu"]),
-aside > div:last-child > button:first-child:not([aria-label*="Collapse"]):not([aria-label*="Expand"]):not([aria-label*="Settings"]):not([aria-label*="Menu"]),
-aside > div:last-child button:has(> div:only-child),
-aside > div:last-child button:has(> span:only-child),
-/* Hide any element with "N" text in sidebar footer - use attribute selectors */
-aside button[title*="Next"],
-aside button[title*="next"],
-aside div[title*="Next"],
-aside div[title*="next"],
-/* Very specific - hide first button in sidebar footer if it's not our settings button */
-div[class*="border-t"] > button:first-child:not([aria-label*="Collapse"]):not([aria-label*="Expand"]):not([aria-label*="Settings"]):not([aria-label*="Menu"]) {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  width: 0 !important;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  position: absolute !important;
-  left: -9999px !important;
-}

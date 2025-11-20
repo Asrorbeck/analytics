@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useLocation, useNavigate, Outlet } from "react-router-dom";
 import { useLanguage } from "@/lib/language-context";
 import { ThemeToggle } from "./theme-toggle";
 import { LanguageSwitcher } from "./language-switcher";
@@ -16,13 +14,9 @@ import {
   User,
 } from "lucide-react";
 
-interface DashboardLayoutProps {
-  children: React.ReactNode;
-}
-
-export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const pathname = usePathname();
-  const router = useRouter();
+export function DashboardLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [logoError, setLogoError] = useState(false);
   const { t } = useLanguage();
@@ -45,7 +39,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     { id: "ai", path: "/ai", label: t.ai, icon: Bot },
   ];
 
-  const currentPath = pathname || "/upload";
+  const currentPath = location.pathname || "/upload";
   const isActive = (path: string) => currentPath === path;
 
   return (
@@ -103,7 +97,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             return (
               <button
                 key={item.id}
-                onClick={() => router.push(item.path)}
+                onClick={() => navigate(item.path)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
                   isActive(item.path)
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
@@ -152,7 +146,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* Content Area */}
         <div className="flex-1 overflow-auto">
-          <div className="p-6 w-full">{children}</div>
+          <div className="p-6 w-full">
+            <Outlet />
+          </div>
         </div>
       </div>
     </div>

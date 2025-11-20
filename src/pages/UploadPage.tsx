@@ -1,5 +1,3 @@
-"use client"
-
 import { FileUpload } from "@/components/file-upload"
 import { useData } from "@/lib/data-context"
 

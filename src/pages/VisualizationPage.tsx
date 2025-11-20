@@ -1,14 +1,12 @@
-"use client"
-
-import { StatisticsPanel } from "@/components/statistics-panel"
-import { useRouter } from "next/navigation"
+import { VisualizationPanel } from "@/components/visualization-panel"
+import { useNavigate } from "react-router-dom"
 import { useLanguage } from "@/lib/language-context"
 import { useData } from "@/lib/data-context"
 import { Upload } from "lucide-react"
 
-export default function StatisticsPage() {
+export default function VisualizationPage() {
   const { t } = useLanguage()
-  const router = useRouter()
+  const navigate = useNavigate()
   const { dataLoaded } = useData()
 
   if (!dataLoaded) {
@@ -19,7 +17,7 @@ export default function StatisticsPage() {
         </div>
         <p className="text-lg font-medium text-foreground">{t.pleaseUploadFile}</p>
         <button
-          onClick={() => router.push("/upload")}
+          onClick={() => navigate("/upload")}
           className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm"
         >
           {t.goToUpload}
@@ -28,6 +26,6 @@ export default function StatisticsPage() {
     )
   }
 
-  return <StatisticsPanel />
+  return <VisualizationPanel />
 }
 

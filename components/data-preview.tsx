@@ -1,24 +1,66 @@
-"use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useLanguage } from "@/lib/language-context"
-import { Table, FileText } from "lucide-react"
+import { useData, type DataRow } from "@/lib/data-context"
+import { Table, FileText, Upload } from "lucide-react"
 
 export function DataPreview() {
   const { t } = useLanguage()
-  // Mock data for demonstration
-  const mockData = [
-    { date: "2024-01-01", product: "Продукт A", sales: 15000, quantity: 120, region: "Север" },
-    { date: "2024-01-02", product: "Продукт B", sales: 22000, quantity: 180, region: "Юг" },
-    { date: "2024-01-03", product: "Продукт A", sales: 18000, quantity: 150, region: "Восток" },
-    { date: "2024-01-04", product: "Продукт C", sales: 12000, quantity: 90, region: "Запад" },
-    { date: "2024-01-05", product: "Продукт B", sales: 25000, quantity: 200, region: "Север" },
-  ]
-
+  const { data, columns, dataLoaded } = useData()
   const [displayRows, setDisplayRows] = useState("10")
-  const [selectedColumns, setSelectedColumns] = useState(["date", "product", "sales", "quantity", "region"])
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([])
 
-  const columns = ["date", "product", "sales", "quantity", "region"]
+  // Initialize selected columns
+  useMemo(() => {
+    if (columns.length > 0 && selectedColumns.length === 0) {
+      setSelectedColumns(columns.map((col) => col.name).slice(0, 5))
+    }
+  }, [columns, selectedColumns.length])
+
+  // Filter data based on selected columns
+  const filteredData = useMemo(() => {
+    if (!data || data.length === 0) return []
+    const rows = parseInt(displayRows) || 10
+    return data.slice(0, rows).map((row) => {
+      const filteredRow: DataRow = {}
+      selectedColumns.forEach((col) => {
+        filteredRow[col] = row[col]
+      })
+      return filteredRow
+    })
+  }, [data, selectedColumns, displayRows])
+
+  // Calculate statistics
+  const stats = useMemo(() => {
+    if (!data || data.length === 0) return null
+    const totalRows = data.length
+    const totalColumns = columns.length
+    const missingValues = data.reduce((acc, row) => {
+      return (
+        acc +
+        Object.values(row).filter((val) => val === null || val === undefined || val === "").length
+      )
+    }, 0)
+    const fileSize = new Blob([JSON.stringify(data)]).size / 1024 / 1024 // MB
+
+    return {
+      totalRows,
+      totalColumns,
+      missingValues,
+      fileSize: fileSize.toFixed(2),
+    }
+  }, [data, columns])
+
+  if (!dataLoaded || !data || data.length === 0) {
+    return (
+      <div className="card-subtle h-96 flex items-center justify-center flex-col gap-4">
+        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+          <Upload className="w-8 h-8 text-muted-foreground" />
+        </div>
+        <p className="text-lg font-medium text-foreground">{t.pleaseUploadFile}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -37,21 +79,25 @@ export function DataPreview() {
         </div>
         <div className="flex-1">
           <label className="text-sm text-foreground/70 block mb-2">{t.columns}</label>
-          <select
-            multiple
-            value={selectedColumns}
-            onChange={(e) => {
-              const selected = Array.from(e.target.selectedOptions).map((o) => o.value)
-              setSelectedColumns(selected)
-            }}
-            className="w-full px-3 py-2 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary text-sm"
-          >
+          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-input border border-border rounded-lg">
             {columns.map((col) => (
-              <option key={col} value={col}>
-                {col}
-              </option>
+              <label key={col.name} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedColumns.includes(col.name)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedColumns([...selectedColumns, col.name])
+                    } else {
+                      setSelectedColumns(selectedColumns.filter((c) => c !== col.name))
+                    }
+                  }}
+                  className="w-4 h-4 accent-primary"
+                />
+                <span className="text-foreground text-sm">{col.name}</span>
+              </label>
             ))}
-          </select>
+          </div>
         </div>
       </div>
 
@@ -66,45 +112,59 @@ export function DataPreview() {
             <tr className="border-b border-border">
               {selectedColumns.map((col) => (
                 <th key={col} className="px-4 py-3 text-left text-foreground/80 font-semibold">
-                  {col.charAt(0).toUpperCase() + col.slice(1)}
+                  {col}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {mockData.map((row, idx) => (
-              <tr key={idx} className="border-b border-border/30 hover:bg-muted/50 transition-colors">
-                {selectedColumns.map((col) => (
-                  <td key={col} className="px-4 py-3 text-foreground">
-                    {row[col as keyof typeof row]}
-                  </td>
-                ))}
+            {filteredData.length > 0 ? (
+              filteredData.map((row, idx) => (
+                <tr key={idx} className="border-b border-border/30 hover:bg-muted/50 transition-colors">
+                  {selectedColumns.map((col) => (
+                    <td key={col} className="px-4 py-3 text-foreground">
+                      {row[col] !== null && row[col] !== undefined
+                        ? typeof row[col] === "number"
+                          ? row[col].toLocaleString()
+                          : String(row[col])
+                        : "-"}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={selectedColumns.length} className="px-4 py-8 text-center text-foreground/60">
+                  No data to display
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: t.totalRows, value: "1,250", icon: FileText },
-          { label: t.totalColumns, value: "5", icon: FileText },
-          { label: t.fileSize, value: "2.4 MB", icon: FileText },
-          { label: t.missingValues, value: "0", icon: FileText },
-        ].map((stat, idx) => {
-          const Icon = stat.icon
-          return (
-            <div key={idx} className="card-subtle p-4 rounded-lg border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon className="w-4 h-4 text-foreground/40" />
-                <p className="text-foreground/60 text-xs">{stat.label}</p>
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: t.totalRows, value: stats.totalRows.toLocaleString(), icon: FileText },
+            { label: t.totalColumns, value: stats.totalColumns.toString(), icon: FileText },
+            { label: t.fileSize, value: `${stats.fileSize} MB`, icon: FileText },
+            { label: t.missingValues, value: stats.missingValues.toString(), icon: FileText },
+          ].map((stat, idx) => {
+            const Icon = stat.icon
+            return (
+              <div key={idx} className="card-subtle p-4 rounded-lg border border-border">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="w-4 h-4 text-foreground/40" />
+                  <p className="text-foreground/60 text-xs">{stat.label}</p>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
               </div>
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

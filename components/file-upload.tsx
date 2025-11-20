@@ -1,9 +1,11 @@
-"use client"
-
 import type React from "react"
 import { useState } from "react"
-import { Upload, CheckCircle, Loader2, FileText } from "lucide-react"
+import { Upload, CheckCircle, Loader2, FileText, AlertCircle } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
+import { useData, type DataRow } from "@/lib/data-context"
+import Papa from "papaparse"
+import type { ParseResult, ParseError } from "papaparse"
+import * as XLSX from "xlsx"
 
 interface FileUploadProps {
   onDataLoaded?: (fileName?: string) => void
@@ -11,9 +13,11 @@ interface FileUploadProps {
 
 export function FileUpload({ onDataLoaded }: FileUploadProps) {
   const { t } = useLanguage()
+  const { setData, setDataLoaded, setFileName, setRawData } = useData()
   const [isDragging, setIsDragging] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle")
-  const [fileName, setFileName] = useState<string | null>(null)
+  const [fileName, setFileNameState] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -33,18 +37,415 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     }
   }
 
-  const handleFile = async (file: File) => {
-    setFileName(file.name)
-    setUploadStatus("uploading")
+  const parseCSV = (file: File): Promise<DataRow[]> => {
+    return new Promise((resolve, reject) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        encoding: "UTF-8", // python.py dagi kabi UTF-8 encoding
+        complete: (results: ParseResult<DataRow>) => {
+          if (results.errors && results.errors.length > 0) {
+            // Faqat muhim xatolarni ko'rsatish
+            const criticalErrors = results.errors.filter(
+              (e: ParseError) => e.type === "Quotes" || e.type === "Delimiter"
+            )
+            if (criticalErrors.length > 0) {
+              reject(
+                new Error(
+                  criticalErrors.map((e: ParseError) => e.message || String(e)).join(", ")
+                )
+              )
+              return
+            }
+          }
+          
+          // Date columnlarni avtomatik aniqlash va parse qilish (python.py dagi kabi)
+          const processedData = (results.data || []).map((row: DataRow) => {
+            const processedRow: DataRow = {}
+            Object.keys(row).forEach((key) => {
+              const value = row[key]
+              
+              // Bo'sh qiymatlar
+              if (value === "" || value === null || value === undefined) {
+                processedRow[key] = null
+                return
+              }
+              
+              // Date columnlarni aniqlash va parse qilish (python.py dagi kabi)
+              const keyLower = key.toLowerCase()
+              if (keyLower.includes("date") || keyLower.includes("time")) {
+                try {
+                  const dateValue = new Date(value as string)
+                  if (!isNaN(dateValue.getTime())) {
+                    processedRow[key] = dateValue.toISOString().split("T")[0]
+                  } else {
+                    processedRow[key] = value
+                  }
+                } catch {
+                  processedRow[key] = value
+                }
+              } else {
+                // Number conversion
+                const numValue = Number(value)
+                if (!isNaN(numValue) && value !== "" && typeof value !== "object") {
+                  processedRow[key] = numValue
+                } else {
+                  processedRow[key] = value
+                }
+              }
+            })
+            return processedRow
+          }) as DataRow[]
+          
+          resolve(processedData)
+        },
+        error: (error: Error) => {
+          reject(new Error(`CSV faylni o'qishda xatolik: ${error.message}`))
+        },
+      })
+    })
+  }
 
-    // Simulate upload delay
-    setTimeout(() => {
+  // Merged cells ni to'ldirish funksiyasi
+  const fillMergedCells = (worksheet: XLSX.WorkSheet): XLSX.WorkSheet => {
+    if (!worksheet["!merges"]) return worksheet
+    
+    const mergedRanges = worksheet["!merges"] || []
+    const filledWorksheet = { ...worksheet }
+    
+    mergedRanges.forEach((range: XLSX.Range) => {
+      const startCell = XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c })
+      const startValue = worksheet[startCell]?.v || worksheet[startCell]?.w
+      
+      if (startValue !== undefined) {
+        // Merged range ichidagi barcha celllarni to'ldirish
+        for (let row = range.s.r; row <= range.e.r; row++) {
+          for (let col = range.s.c; col <= range.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+            if (!filledWorksheet[cellAddress]) {
+              filledWorksheet[cellAddress] = { v: startValue, t: "s" }
+            }
+          }
+        }
+      }
+    })
+    
+    return filledWorksheet
+  }
+
+  // Header qatorini topish
+  const findHeaderRow = (worksheet: XLSX.WorkSheet, maxRows: number = 20): number => {
+    // Range ni topish
+    const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
+    
+    // Birinchi 20 qatorni tekshirish
+    for (let row = 0; row < Math.min(maxRows, range.e.r); row++) {
+      let nonEmptyCells = 0
+      let hasText = false
+      
+      for (let col = 0; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+        const cell = worksheet[cellAddress]
+        if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
+          nonEmptyCells++
+          if (typeof cell.v === "string") {
+            hasText = true
+          }
+        }
+      }
+      
+      // Agar kamida 2 ta non-empty cell bo'lsa va text bo'lsa, bu header bo'lishi mumkin
+      if (nonEmptyCells >= 2 && hasText) {
+        // Keyingi qatorni tekshirish - agar u ham text bo'lsa, bu multi-row header
+        const nextRow = row + 1
+        let nextRowHasText = false
+        for (let col = 0; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: nextRow, c: col })
+          const cell = worksheet[cellAddress]
+          if (cell && typeof cell.v === "string" && cell.v.trim() !== "") {
+            nextRowHasText = true
+            break
+          }
+        }
+        
+        // Agar keyingi qator ham text bo'lsa va data bo'lmasa, header davom etmoqda
+        if (nextRowHasText) {
+          // Keyingi qatorni ham tekshirish
+          const nextNextRow = row + 2
+          let nextNextRowHasNumber = false
+          for (let col = 0; col <= range.e.c; col++) {
+            const cellAddress = XLSX.utils.encode_cell({ r: nextNextRow, c: col })
+            const cell = worksheet[cellAddress]
+            if (cell && (typeof cell.v === "number" || !isNaN(Number(cell.v)))) {
+              nextNextRowHasNumber = true
+              break
+            }
+          }
+          
+          // Agar 2-qatorda number bo'lsa, birinchi qator header
+          if (nextNextRowHasNumber) {
+            return row
+          }
+        } else {
+          // Keyingi qator data bo'lsa, bu header
+          return row
+        }
+      }
+    }
+    
+    return 0 // Default - birinchi qator
+  }
+
+  // Multi-row headers ni birlashtirish
+  const combineMultiRowHeaders = (
+    worksheet: XLSX.WorkSheet,
+    headerStartRow: number,
+    headerEndRow: number
+  ): string[] => {
+    const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
+    const headers: string[] = []
+    
+    for (let col = 0; col <= range.e.c; col++) {
+      const headerParts: string[] = []
+      
+      for (let row = headerStartRow; row <= headerEndRow; row++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+        const cell = worksheet[cellAddress]
+        if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
+          const value = String(cell.v).trim()
+          if (value) {
+            headerParts.push(value)
+          }
+        }
+      }
+      
+      // Header qismlarini birlashtirish
+      if (headerParts.length > 0) {
+        headers.push(headerParts.join(" - "))
+      } else {
+        headers.push(`Column_${col + 1}`)
+      }
+    }
+    
+    return headers
+  }
+
+  const parseExcel = async (file: File): Promise<DataRow[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer)
+          // Excel faylni o'qish - python.py dagi kabi
+          const workbook = XLSX.read(data, { 
+            type: "array",
+            cellDates: true,
+            cellNF: false,
+            cellText: false,
+            raw: false,
+            sheetStubs: true // Bo'sh celllarni ham o'qish
+          })
+          
+          // Birinchi sheet ni olish
+          const firstSheetName = workbook.SheetNames[0]
+          let worksheet = workbook.Sheets[firstSheetName]
+          
+          // Merged cells ni to'ldirish
+          worksheet = fillMergedCells(worksheet)
+          
+          // Header qatorini topish
+          const headerRow = findHeaderRow(worksheet)
+          
+          // Multi-row header ni aniqlash (1-3 qator header bo'lishi mumkin)
+          let headerEndRow = headerRow
+          const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
+          
+          // Keyingi qatorlarni tekshirish - agar text bo'lsa va data bo'lmasa, header davom etmoqda
+          for (let row = headerRow + 1; row <= Math.min(headerRow + 3, range.e.r); row++) {
+            let hasText = false
+            let hasNumber = false
+            
+            for (let col = 0; col <= range.e.c; col++) {
+              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+              const cell = worksheet[cellAddress]
+              if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
+                if (typeof cell.v === "string") {
+                  hasText = true
+                } else if (typeof cell.v === "number" || !isNaN(Number(cell.v))) {
+                  hasNumber = true
+                }
+              }
+            }
+            
+            // Agar text bo'lsa va number bo'lmasa, bu header davomi
+            if (hasText && !hasNumber) {
+              headerEndRow = row
+            } else {
+              break
+            }
+          }
+          
+          // Multi-row headers ni birlashtirish
+          const combinedHeaders = combineMultiRowHeaders(worksheet, headerRow, headerEndRow)
+          
+          // Data qatorlarini o'qish (header dan keyin)
+          const dataStartRow = headerEndRow + 1
+          const jsonData: DataRow[] = []
+          
+          for (let row = dataStartRow; row <= range.e.r; row++) {
+            const rowData: DataRow = {}
+            let hasData = false
+            
+            for (let col = 0; col < combinedHeaders.length; col++) {
+              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+              const cell = worksheet[cellAddress]
+              
+              let value: any = null
+              if (cell) {
+                if (cell.v !== undefined && cell.v !== null && cell.v !== "") {
+                  value = cell.v
+                  hasData = true
+                } else if (cell.w) {
+                  value = cell.w
+                  hasData = true
+                }
+              }
+              
+              rowData[combinedHeaders[col]] = value
+            }
+            
+            // Agar qatorda kamida bitta data bo'lsa, qo'shish
+            if (hasData) {
+              jsonData.push(rowData)
+            }
+          }
+          
+          // Date columnlarni avtomatik aniqlash va parse qilish (python.py dagi kabi)
+          const processedData = jsonData.map((row) => {
+            const processedRow: DataRow = {}
+            Object.keys(row).forEach((key) => {
+              const value = row[key]
+              
+              // Bo'sh qiymatlar
+              if (value === "" || value === null || value === undefined) {
+                processedRow[key] = null
+                return
+              }
+              
+              // Date columnlarni aniqlash va parse qilish (python.py dagi kabi)
+              const keyLower = key.toLowerCase()
+              if (keyLower.includes("date") || keyLower.includes("time")) {
+                try {
+                  if (value instanceof Date) {
+                    processedRow[key] = value.toISOString().split("T")[0]
+                  } else if (typeof value === "string") {
+                    const dateValue = new Date(value)
+                    if (!isNaN(dateValue.getTime())) {
+                      processedRow[key] = dateValue.toISOString().split("T")[0]
+                    } else {
+                      processedRow[key] = value
+                    }
+                  } else {
+                    processedRow[key] = value
+                  }
+                } catch {
+                  processedRow[key] = value
+                }
+              } else {
+                // Number conversion (python.py dagi kabi)
+                // String numberlarni ham parse qilish (masalan, "1,237,304" -> 1237304)
+                let numValue: number | null = null
+                if (typeof value === "string") {
+                  // Comma va space larni olib tashlash
+                  const cleanedValue = value.replace(/,/g, "").replace(/\s/g, "").trim()
+                  numValue = Number(cleanedValue)
+                } else if (typeof value === "number") {
+                  numValue = value
+                }
+                
+                if (numValue !== null && !isNaN(numValue) && value !== "") {
+                  processedRow[key] = numValue
+                } else {
+                  processedRow[key] = value
+                }
+              }
+            })
+            return processedRow
+          })
+          
+          resolve(processedData)
+        } catch (error) {
+          reject(new Error(`Excel faylni o'qishda xatolik: ${error instanceof Error ? error.message : String(error)}`))
+        }
+      }
+      reader.onerror = () => {
+        reject(new Error("Faylni o'qib bo'lmadi"))
+      }
+      reader.readAsArrayBuffer(file)
+    })
+  }
+
+  const handleFile = async (file: File) => {
+    setFileNameState(file.name)
+    setUploadStatus("uploading")
+    setErrorMessage(null)
+
+    try {
+      let parsedData: DataRow[] = []
+
+      // Check file type
+      if (file.name.endsWith(".csv")) {
+        parsedData = await parseCSV(file)
+      } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+        parsedData = await parseExcel(file)
+      } else {
+        throw new Error("Unsupported file format. Please upload CSV or Excel file.")
+      }
+
+      // Clean and process data
+      const cleanedData = parsedData
+        .map((row) => {
+          const cleanedRow: DataRow = {}
+          Object.keys(row).forEach((key) => {
+            const value = row[key]
+            // Convert empty strings to null
+            if (value === "" || value === null || value === undefined) {
+              cleanedRow[key] = null
+            } else {
+              // Try to convert to number if possible
+              const numValue = Number(value)
+              if (!isNaN(numValue) && value !== "" && typeof value !== "object") {
+                cleanedRow[key] = numValue
+              } else {
+                cleanedRow[key] = value
+              }
+            }
+          })
+          return cleanedRow
+        })
+        .filter((row) => Object.keys(row).length > 0)
+
+      if (cleanedData.length === 0) {
+        throw new Error("No data found in file")
+      }
+
+      // Store data
+      setRawData(cleanedData)
+      setData(cleanedData)
+      setFileName(file.name)
+      setDataLoaded(true)
       setUploadStatus("success")
       onDataLoaded?.(file.name)
+
       setTimeout(() => {
         setUploadStatus("idle")
       }, 2000)
-    }, 1500)
+    } catch (error) {
+      console.error("Error parsing file:", error)
+      setErrorMessage(error instanceof Error ? error.message : "Failed to parse file")
+      setUploadStatus("error")
+      setDataLoaded(false)
+    }
   }
 
   return (
@@ -96,6 +497,16 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
           <div className="flex-1">
             <p className="text-foreground font-medium text-sm">{t.fileUploaded}</p>
             <p className="text-foreground/60 text-xs">{fileName}</p>
+          </div>
+        </div>
+      )}
+
+      {uploadStatus === "error" && errorMessage && (
+        <div className="card-subtle p-4 border border-red-600/30 bg-red-50 dark:bg-red-950/20 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-500 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-foreground font-medium text-sm">Error</p>
+            <p className="text-foreground/60 text-xs">{errorMessage}</p>
           </div>
         </div>
       )}
