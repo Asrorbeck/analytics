@@ -115,15 +115,22 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     
     mergedRanges.forEach((range: XLSX.Range) => {
       const startCell = XLSX.utils.encode_cell({ r: range.s.r, c: range.s.c })
-      const startValue = worksheet[startCell]?.v || worksheet[startCell]?.w
+      const startCellData = worksheet[startCell]
+      const startValue = startCellData?.v ?? startCellData?.w
       
-      if (startValue !== undefined) {
+      if (startValue !== undefined && startValue !== null && startValue !== "") {
         // Merged range ichidagi barcha celllarni to'ldirish
         for (let row = range.s.r; row <= range.e.r; row++) {
           for (let col = range.s.c; col <= range.e.c; col++) {
             const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-            if (!filledWorksheet[cellAddress]) {
-              filledWorksheet[cellAddress] = { v: startValue, t: "s" }
+            const existingCell = filledWorksheet[cellAddress]
+            
+            // Agar cell bo'sh bo'lsa yoki faqat format bo'lsa, qiymatni to'ldirish
+            if (!existingCell || existingCell.v === undefined || existingCell.v === null || existingCell.v === "") {
+              filledWorksheet[cellAddress] = {
+                v: startValue,
+                t: typeof startValue === "string" ? "s" : typeof startValue === "number" ? "n" : "s",
+              }
             }
           }
         }
@@ -205,23 +212,67 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
     const headers: string[] = []
     
+    // Merged cells ni tekshirish
+    const mergedRanges = worksheet["!merges"] || []
+    
+    // Har bir column uchun
     for (let col = 0; col <= range.e.c; col++) {
       const headerParts: string[] = []
+      const seenValues = new Set<string>()
       
+      // Har bir header qatori uchun (yuqoridan pastga)
       for (let row = headerStartRow; row <= headerEndRow; row++) {
         const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-        const cell = worksheet[cellAddress]
-        if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
-          const value = String(cell.v).trim()
-          if (value) {
+        let cell = worksheet[cellAddress]
+        let cellValue: any = null
+        
+        // Agar cell bo'sh bo'lsa, merged cell ni tekshirish
+        if (!cell || cell.v === undefined || cell.v === null || cell.v === "") {
+          // Bu column uchun merged cell ni topish
+          for (const mergeRange of mergedRanges) {
+            // Agar bu column merged range ichida bo'lsa
+            if (
+              col >= mergeRange.s.c &&
+              col <= mergeRange.e.c &&
+              row >= mergeRange.s.r &&
+              row <= mergeRange.e.r
+            ) {
+              // Merged cell ning boshlang'ich qiymatini olish
+              const startCellAddress = XLSX.utils.encode_cell({ r: mergeRange.s.r, c: mergeRange.s.c })
+              const startCell = worksheet[startCellAddress]
+              if (startCell && (startCell.v !== undefined || startCell.w)) {
+                cellValue = startCell.v ?? startCell.w
+                break
+              }
+            }
+          }
+        } else {
+          cellValue = cell.v ?? cell.w
+        }
+        
+        // Agar qiymat topilgan bo'lsa va bo'sh bo'lmasa
+        if (cellValue !== null && cellValue !== undefined && cellValue !== "") {
+          const value = String(cellValue).trim()
+          // Faqat muhim qiymatlarni qo'shish
+          // Bo'sh, "-", yoki faqat raqam bo'lmasa, va uzunligi 1 dan katta bo'lsa
+          if (
+            value &&
+            value !== "-" &&
+            value.length > 1 &&
+            !/^[\d\s,\.]+$/.test(value) && // Faqat raqam, probel, vergul, nuqta bo'lmasa
+            !seenValues.has(value) // Allaqachon ko'rilgan bo'lmasa
+          ) {
             headerParts.push(value)
+            seenValues.add(value)
           }
         }
       }
       
       // Header qismlarini birlashtirish
       if (headerParts.length > 0) {
-        headers.push(headerParts.join(" - "))
+        // Agar bir nechta qism bo'lsa, ularni " - " bilan birlashtirish
+        const combined = headerParts.filter((part) => part && part.trim() !== "").join(" - ")
+        headers.push(combined || `Column_${col + 1}`)
       } else {
         headers.push(`Column_${col + 1}`)
       }
@@ -261,26 +312,34 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
           const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
           
           // Keyingi qatorlarni tekshirish - agar text bo'lsa va data bo'lmasa, header davom etmoqda
-          for (let row = headerRow + 1; row <= Math.min(headerRow + 3, range.e.r); row++) {
+          for (let row = headerRow + 1; row <= Math.min(headerRow + 5, range.e.r); row++) {
             let hasText = false
             let hasNumber = false
+            let textCount = 0
+            let numberCount = 0
+            let totalCells = 0
             
             for (let col = 0; col <= range.e.c; col++) {
               const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
               const cell = worksheet[cellAddress]
               if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
-                if (typeof cell.v === "string") {
+                totalCells++
+                if (typeof cell.v === "string" && cell.v.trim() !== "" && cell.v !== "-") {
                   hasText = true
-                } else if (typeof cell.v === "number" || !isNaN(Number(cell.v))) {
+                  textCount++
+                } else if (typeof cell.v === "number" || (!isNaN(Number(cell.v)) && cell.v !== "")) {
                   hasNumber = true
+                  numberCount++
                 }
               }
             }
             
-            // Agar text bo'lsa va number bo'lmasa, bu header davomi
-            if (hasText && !hasNumber) {
+            // Agar text ko'p bo'lsa va number kam bo'lsa, bu header davomi
+            // Yoki agar text va number nisbati 2:1 dan katta bo'lsa
+            if (totalCells > 0 && (textCount > numberCount * 2 || (hasText && !hasNumber))) {
               headerEndRow = row
-            } else {
+            } else if (hasNumber && numberCount > textCount) {
+              // Agar number ko'p bo'lsa, bu data qatori
               break
             }
           }

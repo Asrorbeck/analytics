@@ -35,6 +35,7 @@ export interface Translations {
   
   // Statistics
   selectColumns: string
+  selectMethod: string
   mean: string
   median: string
   stdDev: string
@@ -45,6 +46,31 @@ export interface Translations {
   variables: string
   coefficient: string
   interpretation: string
+  basicStatistics: string
+  percentiles: string
+  movingAverage: string
+  ranking: string
+  growthRate: string
+  cumulativeSum: string
+  outliers: string
+  distribution: string
+  mode: string
+  variance: string
+  range: string
+  q1: string
+  q3: string
+  p90: string
+  p95: string
+  p99: string
+  skewness: string
+  kurtosis: string
+  sum: string
+  window: string
+  rankingMethod: string
+  outlierMethod: string
+  iqr: string
+  zScore: string
+  outliersFound: string
   
   // Visualization
   chartType: string
@@ -52,6 +78,12 @@ export interface Translations {
   lineChart: string
   pieChart: string
   scatterChart: string
+  boxPlot: string
+  heatmap: string
+  waterfall: string
+  pareto: string
+  areaChart: string
+  histogram: string
   chartTitle: string
   xAxis: string
   yAxis: string
@@ -60,6 +92,10 @@ export interface Translations {
   grid: string
   enabled: string
   automatic: string
+  bins: string
+  orientation: string
+  vertical: string
+  horizontal: string
   
   // AI Assistant
   aiAssistant: string
@@ -108,6 +144,7 @@ export const translations: Record<Language, Translations> = {
     fileSize: "Hajm",
     missingValues: "Yetishmayotgan qiymatlar",
     selectColumns: "Tahlil uchun ustunlarni tanlang",
+    selectMethod: "Statistika metodini tanlang",
     mean: "O'rtacha",
     median: "Median",
     stdDev: "Standart og'ish",
@@ -118,11 +155,46 @@ export const translations: Record<Language, Translations> = {
     variables: "O'zgaruvchilar",
     coefficient: "Koeffitsient",
     interpretation: "Tushuntirish",
+    basicStatistics: "Asosiy statistika",
+    percentiles: "Prosentillar",
+    movingAverage: "Surg'uvchi o'rtacha",
+    ranking: "Reyting",
+    growthRate: "O'sish sur'ati",
+    cumulativeSum: "Yig'indi summa",
+    outliers: "Chetga chiqishlar",
+    distribution: "Taqsimot",
+    mode: "Moda",
+    variance: "Dispersiya",
+    range: "Oraliq",
+    q1: "Q1 (25%)",
+    q3: "Q3 (75%)",
+    p90: "P90",
+    p95: "P95",
+    p99: "P99",
+    skewness: "Asimmetriya",
+    kurtosis: "Kurtosis",
+    sum: "Yig'indi",
+    window: "Oyna",
+    rankingMethod: "Reyting metodi",
+    outlierMethod: "Chetga chiqish metodi",
+    iqr: "IQR",
+    zScore: "Z-Score",
+    outliersFound: "Topilgan chetga chiqishlar",
     chartType: "Grafik turi",
     barChart: "Stolbchali diagramma",
     lineChart: "Chiziqli grafik",
     pieChart: "Pirog diagrammasi",
     scatterChart: "Nuqtali diagramma",
+    boxPlot: "Quticha diagrammasi",
+    heatmap: "Issiqlik xaritasi",
+    waterfall: "Suv oqimi",
+    pareto: "Pareto",
+    areaChart: "Maydon grafigi",
+    histogram: "Gistogramma",
+    bins: "Binlar soni",
+    orientation: "Yo'nalish",
+    vertical: "Vertikal",
+    horizontal: "Gorizontal",
     chartTitle: "Sarlavha",
     xAxis: "X o'qi",
     yAxis: "Y o'qi",
@@ -173,6 +245,7 @@ export const translations: Record<Language, Translations> = {
     fileSize: "Ҳажм",
     missingValues: "Етишмаяотган қийматлар",
     selectColumns: "Таҳлил учун устунларни танланг",
+    selectMethod: "Статистика методини танланг",
     mean: "Ўртача",
     median: "Медиан",
     stdDev: "Стандарт оғиш",
@@ -183,11 +256,46 @@ export const translations: Record<Language, Translations> = {
     variables: "Ўзгарувчилар",
     coefficient: "Коэффициент",
     interpretation: "Тушунтириш",
+    basicStatistics: "Асосий статистика",
+    percentiles: "Процентillar",
+    movingAverage: "Сурғувчи ўртача",
+    ranking: "Рейтинг",
+    growthRate: "Ўсиш суръати",
+    cumulativeSum: "Йиғинди сумма",
+    outliers: "Четга чиқишлар",
+    distribution: "Тақсимот",
+    mode: "Мода",
+    variance: "Дисперсия",
+    range: "Оралиқ",
+    q1: "Q1 (25%)",
+    q3: "Q3 (75%)",
+    p90: "P90",
+    p95: "P95",
+    p99: "P99",
+    skewness: "Асимметрия",
+    kurtosis: "Куртозис",
+    sum: "Йиғинди",
+    window: "Ойна",
+    rankingMethod: "Рейтинг метodi",
+    outlierMethod: "Четга чиқиш метodi",
+    iqr: "IQR",
+    zScore: "Z-Score",
+    outliersFound: "Топилган четга чиқишлар",
     chartType: "График тури",
     barChart: "Столбчали диаграмма",
     lineChart: "Чизиқли график",
     pieChart: "Пирог диаграммаси",
     scatterChart: "Нуқтали диаграмма",
+    boxPlot: "Қутича диаграммаси",
+    heatmap: "Иссиқлик харитаси",
+    waterfall: "Сув оқими",
+    pareto: "Парето",
+    areaChart: "Майдон графиги",
+    histogram: "Гистограмма",
+    bins: "Бинлар сони",
+    orientation: "Йўналиш",
+    vertical: "Вертикал",
+    horizontal: "Горизонтал",
     chartTitle: "Сарлавҳа",
     xAxis: "X ўқи",
     yAxis: "Y ўқи",
@@ -238,6 +346,7 @@ export const translations: Record<Language, Translations> = {
     fileSize: "Размер",
     missingValues: "Пропусков",
     selectColumns: "Выберите столбцы для анализа",
+    selectMethod: "Выберите метод статистики",
     mean: "Среднее",
     median: "Медиана",
     stdDev: "Стд. Откл.",
@@ -248,11 +357,46 @@ export const translations: Record<Language, Translations> = {
     variables: "Переменные",
     coefficient: "Коэффициент",
     interpretation: "Интерпретация",
+    basicStatistics: "Базовая статистика",
+    percentiles: "Процентили",
+    movingAverage: "Скользящее среднее",
+    ranking: "Ранжирование",
+    growthRate: "Темп роста",
+    cumulativeSum: "Накопительная сумма",
+    outliers: "Выбросы",
+    distribution: "Распределение",
+    mode: "Мода",
+    variance: "Дисперсия",
+    range: "Размах",
+    q1: "Q1 (25%)",
+    q3: "Q3 (75%)",
+    p90: "P90",
+    p95: "P95",
+    p99: "P99",
+    skewness: "Асимметрия",
+    kurtosis: "Эксцесс",
+    sum: "Сумма",
+    window: "Окно",
+    rankingMethod: "Метод ранжирования",
+    outlierMethod: "Метод выбросов",
+    iqr: "IQR",
+    zScore: "Z-Score",
+    outliersFound: "Найдено выбросов",
     chartType: "Тип графика",
     barChart: "Столбчатая диаграмма",
     lineChart: "Линейный график",
     pieChart: "Круговая диаграмма",
     scatterChart: "Точечная диаграмма",
+    boxPlot: "Ящик с усами",
+    heatmap: "Тепловая карта",
+    waterfall: "Водопад",
+    pareto: "Парето",
+    areaChart: "Диаграмма областей",
+    histogram: "Гистограмма",
+    bins: "Количество bin",
+    orientation: "Ориентация",
+    vertical: "Вертикальная",
+    horizontal: "Горизонтальная",
     chartTitle: "Заголовок",
     xAxis: "Ось X",
     yAxis: "Ось Y",
