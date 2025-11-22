@@ -3,6 +3,7 @@ import { useState, useMemo } from "react"
 import { useLanguage } from "@/lib/language-context"
 import { useData, type DataRow } from "@/lib/data-context"
 import { Table, FileText, Upload } from "lucide-react"
+import { formatNumber } from "@/lib/utils"
 
 export function DataPreview() {
   const { t } = useLanguage()
@@ -125,7 +126,7 @@ export function DataPreview() {
                     <td key={col} className="px-4 py-3 text-foreground">
                       {row[col] !== null && row[col] !== undefined
                         ? typeof row[col] === "number"
-                          ? row[col].toLocaleString()
+                          ? formatNumber(row[col])
                           : String(row[col])
                         : "-"}
                     </td>

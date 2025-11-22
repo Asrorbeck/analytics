@@ -3,6 +3,7 @@ import { useState, useMemo } from "react"
 import { useLanguage } from "@/lib/language-context"
 import { useData } from "@/lib/data-context"
 import { BarChart3, TrendingUp, Upload, LineChart, Target, TrendingDown, AlertTriangle } from "lucide-react"
+import { formatNumber } from "@/lib/utils"
 import {
   calculateStatistics,
   calculateCorrelationMatrix,
@@ -176,9 +177,7 @@ export function StatisticsPanel() {
                   <p className="text-foreground/60 text-xs mb-2">{stat.label}</p>
                   <p className="text-xl font-bold text-foreground">
                     {typeof stat.value === "number"
-                      ? stat.value.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })
+                      ? formatNumber(stat.value, 2)
                       : stat.value}
                   </p>
                 </div>
@@ -305,8 +304,8 @@ export function StatisticsPanel() {
                 <tbody>
                   {topRanked.map((item, idx) => (
                     <tr key={idx} className="border-b border-border/30 hover:bg-muted/50">
-                      <td className="px-4 py-2 text-foreground">{item.rank.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-foreground">{item.value.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-foreground">{formatNumber(item.rank, 2)}</td>
+                      <td className="px-4 py-2 text-foreground">{formatNumber(item.value)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -346,15 +345,15 @@ export function StatisticsPanel() {
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-foreground/60 text-xs mb-2">{t.mean}</p>
-                <p className="text-xl font-bold text-foreground">{avgGrowth.toFixed(2)}%</p>
+                <p className="text-xl font-bold text-foreground">{formatNumber(avgGrowth, 2)}%</p>
               </div>
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-foreground/60 text-xs mb-2">{t.max}</p>
-                <p className="text-xl font-bold text-foreground">{maxGrowth.toFixed(2)}%</p>
+                <p className="text-xl font-bold text-foreground">{formatNumber(maxGrowth, 2)}%</p>
               </div>
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-foreground/60 text-xs mb-2">{t.min}</p>
-                <p className="text-xl font-bold text-foreground">{minGrowth.toFixed(2)}%</p>
+                <p className="text-xl font-bold text-foreground">{formatNumber(minGrowth, 2)}%</p>
               </div>
             </div>
             <div className="h-96 w-full">
@@ -387,9 +386,7 @@ export function StatisticsPanel() {
               <div className="bg-muted p-4 rounded-lg inline-block">
                 <p className="text-foreground/60 text-xs mb-2">{t.sum}</p>
                 <p className="text-xl font-bold text-foreground">
-                  {cumulativeSum[cumulativeSum.length - 1]?.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatNumber(cumulativeSum[cumulativeSum.length - 1], 2)}
                 </p>
               </div>
             </div>
@@ -457,7 +454,7 @@ export function StatisticsPanel() {
                             <td className="px-4 py-2 text-foreground">
                               {col1} ↔ {col2}
                             </td>
-                            <td className="px-4 py-2 text-primary font-semibold">{correlation.toFixed(3)}</td>
+                            <td className="px-4 py-2 text-primary font-semibold">{formatNumber(correlation, 3)}</td>
                             <td className="px-4 py-2 text-foreground/70">{interpretation}</td>
                           </tr>
                         )

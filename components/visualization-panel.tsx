@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLanguage } from "@/lib/language-context";
 import { useData, type DataRow } from "@/lib/data-context";
+import { formatNumber } from "@/lib/utils";
 import {
   BarChart3,
   LineChart,
@@ -321,24 +322,52 @@ export function VisualizationPanel() {
 
   // Render chart function
   const renderChart = () => {
-    if (chartData.length === 0) return null;
+    if (!chartData || chartData.length === 0) return null;
+    if (!selectedYColumn) return null;
 
     if (chartType === "bar") {
-      return (
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={chartData}
-            layout={orientation === "horizontal" ? "horizontal" : "vertical"}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={selectedXColumn || "index"} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey={selectedYColumn} fill="#8884d8" />
-          </BarChart>
-        </ResponsiveContainer>
-      );
+      if (orientation === "horizontal") {
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis 
+                dataKey={selectedXColumn || "index"} 
+                type="category" 
+                width={selectedXColumn ? 150 : 80}
+              />
+              <Tooltip 
+                formatter={(value: any) => formatNumber(value)}
+                labelFormatter={(label: any) => String(label)}
+              />
+              <Legend />
+              <Bar dataKey={selectedYColumn} fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+      } else {
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey={selectedXColumn || "index"} 
+                angle={selectedXColumn ? 0 : -45}
+                textAnchor={selectedXColumn ? "middle" : "end"}
+                height={selectedXColumn ? 60 : 80}
+              />
+              <YAxis tickFormatter={(value) => formatNumber(value)} />
+              <Tooltip 
+                formatter={(value: any) => formatNumber(value)}
+                labelFormatter={(label: any) => String(label)}
+              />
+              <Legend />
+              <Bar dataKey={selectedYColumn} fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+      }
     } else if (chartType === "line") {
       return (
         <ResponsiveContainer width="100%" height="100%">
@@ -346,7 +375,10 @@ export function VisualizationPanel() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey={selectedXColumn || "index"} />
             <YAxis />
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any) => formatNumber(value)}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Legend />
             <Line
               type="monotone"
@@ -367,7 +399,7 @@ export function VisualizationPanel() {
               cy="50%"
               labelLine={false}
               label={({ name, percent }) =>
-                `${name}: ${(percent * 100).toFixed(0)}%`
+                `${name}: ${formatNumber(percent * 100, 0)}%`
               }
               outerRadius={120}
               fill="#8884d8"
@@ -380,7 +412,9 @@ export function VisualizationPanel() {
                 />
               ))}
             </Pie>
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any) => formatNumber(value)}
+            />
             <Legend />
           </RechartsPieChart>
         </ResponsiveContainer>
@@ -392,7 +426,11 @@ export function VisualizationPanel() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="x" name={selectedXColumn} type="number" />
             <YAxis dataKey="y" name={selectedYColumn} type="number" />
-            <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+            <Tooltip 
+              cursor={{ strokeDasharray: "3 3" }}
+              formatter={(value: any) => formatNumber(value)}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Scatter dataKey="y" fill="#8884d8" />
           </RechartsScatterChart>
         </ResponsiveContainer>
@@ -405,7 +443,10 @@ export function VisualizationPanel() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             <YAxis />
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any) => formatNumber(value)}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Bar dataKey="median" fill="#8884d8" name="Median" />
             <Bar dataKey="q1" fill="#82ca9d" name="Q1" />
             <Bar dataKey="q3" fill="#ffc658" name="Q3" />
@@ -451,7 +492,7 @@ export function VisualizationPanel() {
                         className="px-2 py-1 text-center text-xs"
                         style={{ backgroundColor: color }}
                       >
-                        {value.toFixed(2)}
+                        {formatNumber(value, 2)}
                       </td>
                     );
                   })}
@@ -468,7 +509,10 @@ export function VisualizationPanel() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="index" />
             <YAxis />
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any) => formatNumber(value)}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Bar dataKey="value" fill="#8884d8" />
           </BarChart>
         </ResponsiveContainer>
@@ -481,7 +525,15 @@ export function VisualizationPanel() {
             <XAxis dataKey="name" />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" />
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any, name: string) => {
+                if (name === "cumulative") {
+                  return `${formatNumber(value, 2)}%`
+                }
+                return formatNumber(value)
+              }}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Legend />
             <Bar yAxisId="left" dataKey="value" fill="#8884d8" />
             <Line
@@ -501,7 +553,10 @@ export function VisualizationPanel() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey={selectedXColumn || "index"} />
             <YAxis />
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any) => formatNumber(value)}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Legend />
             <Area
               type="monotone"
@@ -520,7 +575,10 @@ export function VisualizationPanel() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="bin" />
             <YAxis />
-            <Tooltip />
+            <Tooltip 
+              formatter={(value: any) => formatNumber(value)}
+              labelFormatter={(label: any) => String(label)}
+            />
             <Bar dataKey="count" fill="#8884d8" />
           </BarChart>
         </ResponsiveContainer>
