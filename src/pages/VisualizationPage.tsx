@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom"
 import { useLanguage } from "@/lib/language-context"
 import { useData } from "@/lib/data-context"
 import { Upload } from "lucide-react"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
 export default function VisualizationPage() {
   const { t } = useLanguage()
   const navigate = useNavigate()
-  const { dataLoaded } = useData()
+  const { dataLoaded, sheets, selectedSheet, setSelectedSheet } = useData()
 
   if (!dataLoaded) {
     return (
@@ -26,6 +27,31 @@ export default function VisualizationPage() {
     )
   }
 
-  return <VisualizationPanel />
+  // Agar faqat bitta sheet bo'lsa, tabs ko'rsatmaslik
+  if (sheets.length <= 1) {
+    return <VisualizationPanel />
+  }
+
+  const currentSheet = selectedSheet || sheets[0]?.name
+
+  return (
+    <div className="space-y-4">
+      <Tabs value={currentSheet} onValueChange={setSelectedSheet}>
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {sheets.map((sheet) => (
+            <TabsTrigger key={sheet.name} value={sheet.name}>
+              {sheet.name}
+              <span className="ml-2 text-xs opacity-60">({sheet.data.length})</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {sheets.map((sheet) => (
+          <TabsContent key={sheet.name} value={sheet.name}>
+            <VisualizationPanel />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  )
 }
 

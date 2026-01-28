@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useLanguage } from "@/lib/language-context"
 import { useData } from "@/lib/data-context"
 import { BarChart3, TrendingUp, Upload, LineChart, Target, TrendingDown, AlertTriangle } from "lucide-react"
@@ -31,27 +31,74 @@ import {
   Scatter,
 } from "recharts"
 
+type StatisticsState = {
+  selectedColumn: string
+  selectedMethod: string
+  maWindow: number
+  rankingMethod: "dense" | "min" | "max" | "average"
+  outlierMethod: "iqr" | "zscore"
+}
+
 export function StatisticsPanel() {
   const { t } = useLanguage()
-  const { data, columns, dataLoaded } = useData()
+  const { data, columns, dataLoaded, selectedSheet } = useData()
 
-  // Get numeric columns
-  const numericColumns = useMemo(() => {
-    return columns.filter((col) => col.numeric).map((col) => col.name)
-  }, [columns])
-
+  // Har bir sheet uchun alohida state saqlash
+  const stateBySheet = useRef<Record<string, StatisticsState>>({})
+  
   const [selectedColumn, setSelectedColumn] = useState<string>("")
   const [selectedMethod, setSelectedMethod] = useState<string>("basic")
   const [maWindow, setMaWindow] = useState<number>(7)
   const [rankingMethod, setRankingMethod] = useState<"dense" | "min" | "max" | "average">("dense")
   const [outlierMethod, setOutlierMethod] = useState<"iqr" | "zscore">("iqr")
 
-  // Initialize selected column
-  useMemo(() => {
-    if (numericColumns.length > 0 && !selectedColumn) {
+  // Get numeric columns
+  const numericColumns = useMemo(() => {
+    return columns.filter((col) => col.numeric).map((col) => col.name)
+  }, [columns])
+
+  // Sheet o'zgarganda, o'sha sheet uchun saqlangan state ni yuklash
+  useEffect(() => {
+    if (selectedSheet && numericColumns.length > 0) {
+      // Agar bu sheet uchun saqlangan state bo'lsa, uni yuklash
+      if (stateBySheet.current[selectedSheet]) {
+        const saved = stateBySheet.current[selectedSheet]
+        // Faqat mavjud columnlarni tekshirish
+        if (numericColumns.includes(saved.selectedColumn)) {
+          setSelectedColumn(saved.selectedColumn)
+        } else {
+          setSelectedColumn(numericColumns[0] || "")
+        }
+        setSelectedMethod(saved.selectedMethod)
+        setMaWindow(saved.maWindow)
+        setRankingMethod(saved.rankingMethod)
+        setOutlierMethod(saved.outlierMethod)
+      } else {
+        // Birinchi marta bu sheetni ko'rish - default qiymatlar
+        setSelectedColumn(numericColumns[0] || "")
+        setSelectedMethod("basic")
+        setMaWindow(7)
+        setRankingMethod("dense")
+        setOutlierMethod("iqr")
+      }
+    } else if (numericColumns.length > 0 && !selectedColumn) {
+      // Legacy support - agar sheet bo'lmasa
       setSelectedColumn(numericColumns[0])
     }
-  }, [numericColumns, selectedColumn])
+  }, [selectedSheet, columns]) // columns o'zgarganda ham yangilash
+
+  // State o'zgarganda, current sheet uchun saqlash
+  useEffect(() => {
+    if (selectedSheet) {
+      stateBySheet.current[selectedSheet] = {
+        selectedColumn,
+        selectedMethod,
+        maWindow,
+        rankingMethod,
+        outlierMethod,
+      }
+    }
+  }, [selectedColumn, selectedMethod, maWindow, rankingMethod, outlierMethod, selectedSheet])
 
   // Calculate statistics for selected column
   const stats = useMemo(() => {

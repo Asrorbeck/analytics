@@ -2,7 +2,7 @@ import type React from "react"
 import { useState } from "react"
 import { Upload, CheckCircle, Loader2, FileText, AlertCircle } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
-import { useData, type DataRow } from "@/lib/data-context"
+import { useData, type DataRow, type SheetData } from "@/lib/data-context"
 import Papa from "papaparse"
 import type { ParseResult, ParseError } from "papaparse"
 import * as XLSX from "xlsx"
@@ -13,7 +13,7 @@ interface FileUploadProps {
 
 export function FileUpload({ onDataLoaded }: FileUploadProps) {
   const { t } = useLanguage()
-  const { setData, setDataLoaded, setFileName, setRawData } = useData()
+  const { setData, setDataLoaded, setFileName, setRawData, setSheets, setSelectedSheet, setColumns } = useData()
   const [isDragging, setIsDragging] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle")
   const [fileName, setFileNameState] = useState<string | null>(null)
@@ -281,158 +281,227 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     return headers
   }
 
-  const parseExcel = async (file: File): Promise<DataRow[]> => {
+  // Helper function to parse a single sheet
+  const parseSingleSheet = (
+    worksheet: XLSX.WorkSheet,
+    sheetName: string
+  ): SheetData => {
+    // Merged cells ni to'ldirish
+    let filledWorksheet = fillMergedCells(worksheet)
+    
+    // Header qatorini topish
+    const headerRow = findHeaderRow(filledWorksheet)
+    
+    // Multi-row header ni aniqlash (1-3 qator header bo'lishi mumkin)
+    let headerEndRow = headerRow
+    const range = XLSX.utils.decode_range(filledWorksheet["!ref"] || "A1")
+    
+    // Keyingi qatorlarni tekshirish - agar text bo'lsa va data bo'lmasa, header davom etmoqda
+    for (let row = headerRow + 1; row <= Math.min(headerRow + 5, range.e.r); row++) {
+      let hasText = false
+      let hasNumber = false
+      let textCount = 0
+      let numberCount = 0
+      let totalCells = 0
+      
+      for (let col = 0; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+        const cell = filledWorksheet[cellAddress]
+        if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
+          totalCells++
+          if (typeof cell.v === "string" && cell.v.trim() !== "" && cell.v !== "-") {
+            hasText = true
+            textCount++
+          } else if (typeof cell.v === "number" || (!isNaN(Number(cell.v)) && cell.v !== "")) {
+            hasNumber = true
+            numberCount++
+          }
+        }
+      }
+      
+      // Agar text ko'p bo'lsa va number kam bo'lsa, bu header davomi
+      if (totalCells > 0 && (textCount > numberCount * 2 || (hasText && !hasNumber))) {
+        headerEndRow = row
+      } else if (hasNumber && numberCount > textCount) {
+        // Agar number ko'p bo'lsa, bu data qatori
+        break
+      }
+    }
+    
+    // Multi-row headers ni birlashtirish
+    const combinedHeaders = combineMultiRowHeaders(filledWorksheet, headerRow, headerEndRow)
+    
+    // Data qatorlarini o'qish (header dan keyin)
+    const dataStartRow = headerEndRow + 1
+    const jsonData: DataRow[] = []
+    
+    for (let row = dataStartRow; row <= range.e.r; row++) {
+      const rowData: DataRow = {}
+      let hasData = false
+      
+      for (let col = 0; col < combinedHeaders.length; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
+        const cell = filledWorksheet[cellAddress]
+        
+        let value: any = null
+        if (cell) {
+          if (cell.v !== undefined && cell.v !== null && cell.v !== "") {
+            value = cell.v
+            hasData = true
+          } else if (cell.w) {
+            value = cell.w
+            hasData = true
+          }
+        }
+        
+        rowData[combinedHeaders[col]] = value
+      }
+      
+      // Agar qatorda kamida bitta data bo'lsa, qo'shish
+      if (hasData) {
+        jsonData.push(rowData)
+      }
+    }
+    
+    // Date columnlarni avtomatik aniqlash va parse qilish
+    const processedData = jsonData.map((row) => {
+      const processedRow: DataRow = {}
+      Object.keys(row).forEach((key) => {
+        const value = row[key]
+        
+        // Bo'sh qiymatlar
+        if (value === "" || value === null || value === undefined) {
+          processedRow[key] = null
+          return
+        }
+        
+        // Date columnlarni aniqlash va parse qilish
+        const keyLower = key.toLowerCase()
+        if (keyLower.includes("date") || keyLower.includes("time")) {
+          try {
+            if (value instanceof Date) {
+              processedRow[key] = value.toISOString().split("T")[0]
+            } else if (typeof value === "string") {
+              const dateValue = new Date(value)
+              if (!isNaN(dateValue.getTime())) {
+                processedRow[key] = dateValue.toISOString().split("T")[0]
+              } else {
+                processedRow[key] = value
+              }
+            } else {
+              processedRow[key] = value
+            }
+          } catch {
+            processedRow[key] = value
+          }
+        } else {
+          // Number conversion
+          let numValue: number | null = null
+          if (typeof value === "string") {
+            const cleanedValue = value.replace(/,/g, "").replace(/\s/g, "").trim()
+            numValue = Number(cleanedValue)
+          } else if (typeof value === "number") {
+            numValue = value
+          }
+          
+          if (numValue !== null && !isNaN(numValue) && value !== "") {
+            processedRow[key] = numValue
+          } else {
+            processedRow[key] = value
+          }
+        }
+      })
+      return processedRow
+    })
+    
+    // Detect columns
+    const columns = processedData.length > 0
+      ? Object.keys(processedData[0]).map((key) => {
+          const values = processedData
+            .map((row) => row[key])
+            .filter((val) => val !== null && val !== undefined && val !== "")
+          
+          let type: "string" | "number" | "date" | "boolean" = "string"
+          let numeric = false
+          
+          if (values.length > 0) {
+            let numericCount = 0
+            let dateCount = 0
+            let booleanCount = 0
+            
+            values.slice(0, Math.min(100, values.length)).forEach((val) => {
+              if (typeof val === "number" || (!isNaN(Number(val)) && val !== "" && String(val).trim() !== "")) {
+                numericCount++
+              }
+              if (typeof val === "string" && !isNaN(Date.parse(val)) && val.length > 5) {
+                dateCount++
+              }
+              if (typeof val === "boolean" || val === "true" || val === "false" || val === true || val === false) {
+                booleanCount++
+              }
+            })
+            
+            const sampleSize = Math.min(100, values.length)
+            if (numericCount / sampleSize > 0.8) {
+              numeric = true
+              type = "number"
+            } else if (dateCount / sampleSize > 0.5) {
+              type = "date"
+            } else if (booleanCount / sampleSize > 0.8) {
+              type = "boolean"
+            }
+          }
+          
+          return { name: key, type, numeric }
+        })
+      : []
+    
+    return {
+      name: sheetName,
+      data: processedData,
+      columns,
+    }
+  }
+
+  const parseExcel = async (file: File): Promise<SheetData[]> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer)
-          // Excel faylni o'qish - python.py dagi kabi
+          // Excel faylni o'qish
           const workbook = XLSX.read(data, { 
             type: "array",
             cellDates: true,
             cellNF: false,
             cellText: false,
             raw: false,
-            sheetStubs: true // Bo'sh celllarni ham o'qish
+            sheetStubs: true
           })
           
-          // Birinchi sheet ni olish
-          const firstSheetName = workbook.SheetNames[0]
-          let worksheet = workbook.Sheets[firstSheetName]
+          // Barcha sheetlarni o'qish
+          const sheets: SheetData[] = []
           
-          // Merged cells ni to'ldirish
-          worksheet = fillMergedCells(worksheet)
-          
-          // Header qatorini topish
-          const headerRow = findHeaderRow(worksheet)
-          
-          // Multi-row header ni aniqlash (1-3 qator header bo'lishi mumkin)
-          let headerEndRow = headerRow
-          const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1")
-          
-          // Keyingi qatorlarni tekshirish - agar text bo'lsa va data bo'lmasa, header davom etmoqda
-          for (let row = headerRow + 1; row <= Math.min(headerRow + 5, range.e.r); row++) {
-            let hasText = false
-            let hasNumber = false
-            let textCount = 0
-            let numberCount = 0
-            let totalCells = 0
-            
-            for (let col = 0; col <= range.e.c; col++) {
-              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-              const cell = worksheet[cellAddress]
-              if (cell && cell.v !== undefined && cell.v !== null && cell.v !== "") {
-                totalCells++
-                if (typeof cell.v === "string" && cell.v.trim() !== "" && cell.v !== "-") {
-                  hasText = true
-                  textCount++
-                } else if (typeof cell.v === "number" || (!isNaN(Number(cell.v)) && cell.v !== "")) {
-                  hasNumber = true
-                  numberCount++
-                }
+          for (const sheetName of workbook.SheetNames) {
+            const worksheet = workbook.Sheets[sheetName]
+            try {
+              const sheetData = parseSingleSheet(worksheet, sheetName)
+              if (sheetData.data.length > 0) {
+                sheets.push(sheetData)
               }
-            }
-            
-            // Agar text ko'p bo'lsa va number kam bo'lsa, bu header davomi
-            // Yoki agar text va number nisbati 2:1 dan katta bo'lsa
-            if (totalCells > 0 && (textCount > numberCount * 2 || (hasText && !hasNumber))) {
-              headerEndRow = row
-            } else if (hasNumber && numberCount > textCount) {
-              // Agar number ko'p bo'lsa, bu data qatori
-              break
+            } catch (error) {
+              console.warn(`Sheet "${sheetName}" ni o'qishda xatolik:`, error)
+              // Xatolik bo'lsa ham davom etish
             }
           }
           
-          // Multi-row headers ni birlashtirish
-          const combinedHeaders = combineMultiRowHeaders(worksheet, headerRow, headerEndRow)
-          
-          // Data qatorlarini o'qish (header dan keyin)
-          const dataStartRow = headerEndRow + 1
-          const jsonData: DataRow[] = []
-          
-          for (let row = dataStartRow; row <= range.e.r; row++) {
-            const rowData: DataRow = {}
-            let hasData = false
-            
-            for (let col = 0; col < combinedHeaders.length; col++) {
-              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-              const cell = worksheet[cellAddress]
-              
-              let value: any = null
-              if (cell) {
-                if (cell.v !== undefined && cell.v !== null && cell.v !== "") {
-                  value = cell.v
-                  hasData = true
-                } else if (cell.w) {
-                  value = cell.w
-                  hasData = true
-                }
-              }
-              
-              rowData[combinedHeaders[col]] = value
-            }
-            
-            // Agar qatorda kamida bitta data bo'lsa, qo'shish
-            if (hasData) {
-              jsonData.push(rowData)
-            }
+          if (sheets.length === 0) {
+            reject(new Error("Hech qanday ma'lumot topilmadi"))
+            return
           }
           
-          // Date columnlarni avtomatik aniqlash va parse qilish (python.py dagi kabi)
-          const processedData = jsonData.map((row) => {
-            const processedRow: DataRow = {}
-            Object.keys(row).forEach((key) => {
-              const value = row[key]
-              
-              // Bo'sh qiymatlar
-              if (value === "" || value === null || value === undefined) {
-                processedRow[key] = null
-                return
-              }
-              
-              // Date columnlarni aniqlash va parse qilish (python.py dagi kabi)
-              const keyLower = key.toLowerCase()
-              if (keyLower.includes("date") || keyLower.includes("time")) {
-                try {
-                  if (value instanceof Date) {
-                    processedRow[key] = value.toISOString().split("T")[0]
-                  } else if (typeof value === "string") {
-                    const dateValue = new Date(value)
-                    if (!isNaN(dateValue.getTime())) {
-                      processedRow[key] = dateValue.toISOString().split("T")[0]
-                    } else {
-                      processedRow[key] = value
-                    }
-                  } else {
-                    processedRow[key] = value
-                  }
-                } catch {
-                  processedRow[key] = value
-                }
-              } else {
-                // Number conversion (python.py dagi kabi)
-                // String numberlarni ham parse qilish (masalan, "1,237,304" -> 1237304)
-                let numValue: number | null = null
-                if (typeof value === "string") {
-                  // Comma va space larni olib tashlash
-                  const cleanedValue = value.replace(/,/g, "").replace(/\s/g, "").trim()
-                  numValue = Number(cleanedValue)
-                } else if (typeof value === "number") {
-                  numValue = value
-                }
-                
-                if (numValue !== null && !isNaN(numValue) && value !== "") {
-                  processedRow[key] = numValue
-                } else {
-                  processedRow[key] = value
-                }
-              }
-            })
-            return processedRow
-          })
+          resolve(sheets)
           
-          resolve(processedData)
         } catch (error) {
           reject(new Error(`Excel faylni o'qishda xatolik: ${error instanceof Error ? error.message : String(error)}`))
         }
@@ -450,47 +519,102 @@ export function FileUpload({ onDataLoaded }: FileUploadProps) {
     setErrorMessage(null)
 
     try {
-      let parsedData: DataRow[] = []
+      let sheets: SheetData[] = []
 
       // Check file type
       if (file.name.endsWith(".csv")) {
-        parsedData = await parseCSV(file)
+        // CSV uchun bitta sheet yaratish
+        const parsedData = await parseCSV(file)
+        
+        // Clean and process data
+        const cleanedData = parsedData
+          .map((row) => {
+            const cleanedRow: DataRow = {}
+            Object.keys(row).forEach((key) => {
+              const value = row[key]
+              if (value === "" || value === null || value === undefined) {
+                cleanedRow[key] = null
+              } else {
+                const numValue = Number(value)
+                if (!isNaN(numValue) && value !== "" && typeof value !== "object") {
+                  cleanedRow[key] = numValue
+                } else {
+                  cleanedRow[key] = value
+                }
+              }
+            })
+            return cleanedRow
+          })
+          .filter((row) => Object.keys(row).length > 0)
+
+        if (cleanedData.length === 0) {
+          throw new Error("No data found in file")
+        }
+
+        // Detect columns
+        const columns = cleanedData.length > 0
+          ? Object.keys(cleanedData[0]).map((key) => {
+              const values = cleanedData
+                .map((row) => row[key])
+                .filter((val) => val !== null && val !== undefined && val !== "")
+              
+              let type: "string" | "number" | "date" | "boolean" = "string"
+              let numeric = false
+              
+              if (values.length > 0) {
+                let numericCount = 0
+                let dateCount = 0
+                let booleanCount = 0
+                
+                values.slice(0, Math.min(100, values.length)).forEach((val) => {
+                  if (typeof val === "number" || (!isNaN(Number(val)) && val !== "" && String(val).trim() !== "")) {
+                    numericCount++
+                  }
+                  if (typeof val === "string" && !isNaN(Date.parse(val)) && val.length > 5) {
+                    dateCount++
+                  }
+                  if (typeof val === "boolean" || val === "true" || val === "false" || val === true || val === false) {
+                    booleanCount++
+                  }
+                })
+                
+                const sampleSize = Math.min(100, values.length)
+                if (numericCount / sampleSize > 0.8) {
+                  numeric = true
+                  type = "number"
+                } else if (dateCount / sampleSize > 0.5) {
+                  type = "date"
+                } else if (booleanCount / sampleSize > 0.8) {
+                  type = "boolean"
+                }
+              }
+              
+              return { name: key, type, numeric }
+            })
+          : []
+
+        sheets = [{
+          name: "Sheet1",
+          data: cleanedData,
+          columns,
+        }]
       } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
-        parsedData = await parseExcel(file)
+        sheets = await parseExcel(file)
       } else {
         throw new Error("Unsupported file format. Please upload CSV or Excel file.")
       }
 
-      // Clean and process data
-      const cleanedData = parsedData
-        .map((row) => {
-          const cleanedRow: DataRow = {}
-          Object.keys(row).forEach((key) => {
-            const value = row[key]
-            // Convert empty strings to null
-            if (value === "" || value === null || value === undefined) {
-              cleanedRow[key] = null
-            } else {
-              // Try to convert to number if possible
-              const numValue = Number(value)
-              if (!isNaN(numValue) && value !== "" && typeof value !== "object") {
-                cleanedRow[key] = numValue
-              } else {
-                cleanedRow[key] = value
-              }
-            }
-          })
-          return cleanedRow
-        })
-        .filter((row) => Object.keys(row).length > 0)
-
-      if (cleanedData.length === 0) {
+      if (sheets.length === 0) {
         throw new Error("No data found in file")
       }
 
       // Store data
-      setRawData(cleanedData)
-      setData(cleanedData)
+      setSheets(sheets)
+      setSelectedSheet(sheets[0]?.name || null)
+      // Legacy support
+      setRawData(sheets[0]?.data || null)
+      setData(sheets[0]?.data || [])
+      setColumns(sheets[0]?.columns || [])
       setFileName(file.name)
       setDataLoaded(true)
       setUploadStatus("success")

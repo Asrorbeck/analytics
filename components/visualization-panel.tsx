@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useLanguage } from "@/lib/language-context";
 import { useData, type DataRow } from "@/lib/data-context";
 import { formatNumber } from "@/lib/utils";
@@ -45,9 +45,23 @@ const COLORS = [
   "#d084d0",
 ];
 
+type VisualizationState = {
+  chartType: string
+  selectedXColumn: string
+  selectedYColumn: string
+  selectedGroupColumn: string
+  selectedColorColumn: string
+  orientation: "vertical" | "horizontal"
+  bins: number
+}
+
 export function VisualizationPanel() {
   const { t } = useLanguage();
-  const { data, columns, dataLoaded } = useData();
+  const { data, columns, dataLoaded, selectedSheet } = useData();
+  
+  // Har bir sheet uchun alohida state saqlash
+  const stateBySheet = useRef<Record<string, VisualizationState>>({});
+  
   const [chartType, setChartType] = useState("bar");
   const [selectedXColumn, setSelectedXColumn] = useState<string>("");
   const [selectedYColumn, setSelectedYColumn] = useState<string>("");
@@ -67,15 +81,71 @@ export function VisualizationPanel() {
     return columns.filter((col) => !col.numeric).map((col) => col.name);
   }, [columns]);
 
-  // Initialize selected columns
-  useMemo(() => {
-    if (numericColumns.length > 0 && !selectedYColumn) {
-      setSelectedYColumn(numericColumns[0]);
+  // Sheet o'zgarganda, o'sha sheet uchun saqlangan state ni yuklash
+  useEffect(() => {
+    if (selectedSheet && (numericColumns.length > 0 || stringColumns.length > 0)) {
+      // Agar bu sheet uchun saqlangan state bo'lsa, uni yuklash
+      if (stateBySheet.current[selectedSheet]) {
+        const saved = stateBySheet.current[selectedSheet];
+        // Faqat mavjud columnlarni tekshirish
+        setChartType(saved.chartType);
+        setSelectedXColumn(
+          saved.selectedXColumn && stringColumns.includes(saved.selectedXColumn) 
+            ? saved.selectedXColumn 
+            : (stringColumns[0] || "")
+        );
+        setSelectedYColumn(
+          saved.selectedYColumn && numericColumns.includes(saved.selectedYColumn) 
+            ? saved.selectedYColumn 
+            : (numericColumns[0] || "")
+        );
+        setSelectedGroupColumn(
+          saved.selectedGroupColumn && stringColumns.includes(saved.selectedGroupColumn) 
+            ? saved.selectedGroupColumn 
+            : ""
+        );
+        setSelectedColorColumn(
+          saved.selectedColorColumn && stringColumns.includes(saved.selectedColorColumn) 
+            ? saved.selectedColorColumn 
+            : ""
+        );
+        setOrientation(saved.orientation);
+        setBins(saved.bins);
+      } else {
+        // Birinchi marta bu sheetni ko'rish - default qiymatlar
+        setChartType("bar");
+        setSelectedXColumn(stringColumns[0] || "");
+        setSelectedYColumn(numericColumns[0] || "");
+        setSelectedGroupColumn("");
+        setSelectedColorColumn("");
+        setOrientation("vertical");
+        setBins(30);
+      }
+    } else if (!selectedSheet) {
+      // Legacy support - agar sheet bo'lmasa
+      if (numericColumns.length > 0 && !selectedYColumn) {
+        setSelectedYColumn(numericColumns[0]);
+      }
+      if (stringColumns.length > 0 && !selectedXColumn) {
+        setSelectedXColumn(stringColumns[0]);
+      }
     }
-    if (stringColumns.length > 0 && !selectedXColumn) {
-      setSelectedXColumn(stringColumns[0]);
+  }, [selectedSheet, columns]); // columns o'zgarganda ham yangilash
+
+  // State o'zgarganda, current sheet uchun saqlash
+  useEffect(() => {
+    if (selectedSheet) {
+      stateBySheet.current[selectedSheet] = {
+        chartType,
+        selectedXColumn,
+        selectedYColumn,
+        selectedGroupColumn,
+        selectedColorColumn,
+        orientation,
+        bins,
+      };
     }
-  }, [numericColumns, stringColumns, selectedXColumn, selectedYColumn]);
+  }, [chartType, selectedXColumn, selectedYColumn, selectedGroupColumn, selectedColorColumn, orientation, bins, selectedSheet]);
 
   // Prepare chart data
   const chartData = useMemo(() => {

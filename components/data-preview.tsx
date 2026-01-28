@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useLanguage } from "@/lib/language-context"
 import { useData, type DataRow } from "@/lib/data-context"
 import { Table, FileText, Upload } from "lucide-react"
@@ -7,16 +7,56 @@ import { formatNumber } from "@/lib/utils"
 
 export function DataPreview() {
   const { t } = useLanguage()
-  const { data, columns, dataLoaded } = useData()
+  const { data, columns, dataLoaded, selectedSheet } = useData()
   const [displayRows, setDisplayRows] = useState("10")
+  
+  // Har bir sheet uchun alohida selectedColumns saqlash
+  const selectedColumnsBySheet = useRef<Record<string, string[]>>({})
   const [selectedColumns, setSelectedColumns] = useState<string[]>([])
 
-  // Initialize selected columns
-  useMemo(() => {
-    if (columns.length > 0 && selectedColumns.length === 0) {
-      setSelectedColumns(columns.map((col) => col.name).slice(0, 5))
+  // Sheet o'zgarganda, o'sha sheet uchun saqlangan selectedColumns ni yuklash
+  useEffect(() => {
+    if (selectedSheet && columns.length > 0) {
+      const columnNames = columns.map((col) => col.name)
+      
+      // Agar bu sheet uchun saqlangan selectedColumns bo'lsa, uni yuklash
+      if (selectedColumnsBySheet.current[selectedSheet]) {
+        const savedColumns = selectedColumnsBySheet.current[selectedSheet]
+        // Faqat mavjud columnlarni saqlash
+        const validColumns = savedColumns.filter(col => columnNames.includes(col))
+        if (validColumns.length > 0) {
+          // Faqat agar hozirgi selectedColumns dan farq qilsa, yangilash
+          const currentColumnsStr = [...selectedColumns].sort().join(',')
+          const validColumnsStr = [...validColumns].sort().join(',')
+          if (currentColumnsStr !== validColumnsStr) {
+            setSelectedColumns(validColumns)
+          }
+        } else {
+          // Agar validColumns bo'sh bo'lsa, default qilish
+          setSelectedColumns(columnNames.slice(0, 5))
+        }
+      } else {
+        // Birinchi marta bu sheetni ko'rish - default columnlarni tanlash
+        setSelectedColumns(columnNames.slice(0, 5))
+      }
+    } else if (columns.length === 0) {
+      setSelectedColumns([])
     }
-  }, [columns, selectedColumns.length])
+  }, [selectedSheet, columns]) // selectedColumns ni dependency dan olib tashlash
+
+  // selectedColumns o'zgarganda (user tomonidan), current sheet uchun saqlash
+  useEffect(() => {
+    if (selectedSheet && selectedColumns.length > 0) {
+      const saved = selectedColumnsBySheet.current[selectedSheet]
+      const savedStr = saved ? [...saved].sort().join(',') : ''
+      const currentStr = [...selectedColumns].sort().join(',')
+      
+      // Faqat agar o'zgarish bo'lsa, saqlash
+      if (savedStr !== currentStr) {
+        selectedColumnsBySheet.current[selectedSheet] = [...selectedColumns]
+      }
+    }
+  }, [selectedColumns, selectedSheet])
 
   // Filter data based on selected columns
   const filteredData = useMemo(() => {
